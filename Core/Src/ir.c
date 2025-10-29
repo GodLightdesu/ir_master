@@ -5,18 +5,23 @@
 #define SLAVE_1_ADDR (0x30 << 1)
 #define SLAVE_2_ADDR (0x31 << 1)
 
-#define IR_BUFFER_SIZE 32  // 8 * 4 bytes
-
 static I2C_HandleTypeDef *I2C_Handle[SLAVES_NO] = {0};
 
 // 雙緩衝設計
 static uint8_t RxBuffer[SLAVES_NO][IR_BUFFER_SIZE] = {0};      // ISR 寫入
-static uint8_t ProcessBuffer[SLAVES_NO][IR_BUFFER_SIZE] = {0}; // Main 讀取
+uint8_t ProcessBuffer[SLAVES_NO][IR_BUFFER_SIZE] = {0}; // Main 讀取
 static volatile uint8_t DataReady[SLAVES_NO] = {0};            // 資料就緒標誌
 
 void IR_Init(I2C_HandleTypeDef *hi2c1, I2C_HandleTypeDef *hi2c2) {
   I2C_Handle[SLAVE_1] = hi2c1;
   I2C_Handle[SLAVE_2] = hi2c2;
+  
+  // 清除所有緩衝區和狀態
+  for (int i = 0; i < SLAVES_NO; i++) {
+    memset(RxBuffer[i], 0, IR_BUFFER_SIZE);
+    memset(ProcessBuffer[i], 0, IR_BUFFER_SIZE);
+    DataReady[i] = 0;
+  }
 }
 
 void IR_ReadData(Slave_ID slaves_id) {
@@ -31,7 +36,7 @@ void IR_ReadData(Slave_ID slaves_id) {
   );
 }
 
-uint8_t IR_GetData(Slave_ID slave_id, uint8_t *data, uint16_t size) {
+uint8_t IR_SaveData(Slave_ID slave_id, uint8_t *data, uint16_t size) {
   if (DataReady[slave_id]) {
     // 複製資料
     size = (size > IR_BUFFER_SIZE) ? IR_BUFFER_SIZE : size;
@@ -44,6 +49,10 @@ uint8_t IR_GetData(Slave_ID slave_id, uint8_t *data, uint16_t size) {
   return 0;  // 無新資料
 }
 
+uint8_t IR_IsDataReady(Slave_ID slave_id) { return DataReady[slave_id]; }
+
+void IR_ClearDataReady(Slave_ID slave_id) { DataReady[slave_id] = 0; }
+
 /* I2C event callback */
 void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c) {
   for (int sid = 0; sid < SLAVES_NO; sid++) {
@@ -54,14 +63,6 @@ void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c) {
       // 設定資料就緒標誌
       DataReady[sid] = 1;
       
-      // 立即開始下一次接收
-      uint16_t devAddr = (sid == SLAVE_1) ? SLAVE_1_ADDR : SLAVE_2_ADDR;
-      HAL_I2C_Master_Receive_IT(
-        I2C_Handle[sid],
-        devAddr,
-        RxBuffer[sid],
-        IR_BUFFER_SIZE
-      );
       break;
     }
   }

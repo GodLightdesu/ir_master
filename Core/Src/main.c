@@ -28,6 +28,7 @@
 #include "i2c_master.h"
 #include "led.h"
 #include "ir.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -59,6 +60,38 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+// Function to parse and display IR data as decimal values
+void ParseAndDisplayIRData(uint8_t *data, uint16_t size) {
+    char buffer[128];
+    int pos = 0;
+    
+    // Parse each 2-byte pair
+    for (int i = 0; i < size; i += 2) {
+        uint16_t value = (data[i+1] << 8) | data[i];  // Little-endian
+        pos += sprintf(&buffer[pos], "%u ", value);
+    }
+    
+    buffer[pos++] = '\r';
+    buffer[pos++] = '\n';
+    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, pos, HAL_MAX_DELAY);
+}
+
+// Function to display raw hex data
+void DisplayRawHexData(uint8_t *data, uint16_t size) {
+    char buffer[64];
+    int bufferPos = 0;
+    
+    for (int i = 0; i < size; i++) {
+        bufferPos += sprintf(&buffer[bufferPos], "%02x ", data[i]);
+    }
+    
+    buffer[bufferPos++] = '\r';
+    buffer[bufferPos++] = '\n';
+    buffer[bufferPos] = '\0';
+    
+    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, bufferPos, HAL_MAX_DELAY);
+}
 
 /* USER CODE END 0 */
 
@@ -94,25 +127,61 @@ int main(void)
   MX_I2C1_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  // IR_Init(&hi2c1, NULL);
-  // IR_ReadData(SLAVE_1); // 開始從 Slave 1 讀取資料
+  // Ensure LED initial state is OFF
+  LED_Off();
+  
+  // Brief delay for system stabilization
+  HAL_Delay(200);
+  
+  // Initialize IR module
+  IR_Init(&hi2c1, NULL);
+  
+  // Clear any possible residual states
+  IR_ClearDataReady(SLAVE_1);
+  
+  // Additional delay to ensure I2C is fully ready
+  HAL_Delay(100);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  
+  // Startup indicator: Flash 3 times to show system is ready
+  LED_Flash(50, 3);
+  HAL_Delay(500);
+  
+  uint32_t lastRequestTime = HAL_GetTick();
+  
   while (1) {
-    // 每秒檢查一次 I2C 設備
-    uint16_t devaddr = I2C_Scan(&hi2c1);
-    if (devaddr == 0x30) {
-      // 找到裝置，開啟 LED
-      LED_On();
-    } else {
-      // 未找到裝置，關閉 LED
+    uint32_t currentTime = HAL_GetTick();
+    
+    // Request IR data every 100ms
+    if (currentTime - lastRequestTime >= 100 && !IR_IsDataReady(SLAVE_1)) {
+      IR_ReadData(SLAVE_1);
+      lastRequestTime = currentTime;
+    }
+
+    // Check if data is ready
+    if (IR_IsDataReady(SLAVE_1)) {
+      LED_Flash(100, 1);  // Single flash to indicate data received
+
+      // Display raw hex data for reference
+      // HAL_UART_Transmit(&huart2, (uint8_t*)"Raw: ", 5, HAL_MAX_DELAY);
+      // DisplayRawHexData(ProcessBuffer[SLAVE_1], IR_BUFFER_SIZE);
+      
+      // Parse and display as decimal values
+      HAL_UART_Transmit(&huart2, (uint8_t*)"Decimal: ", 9, HAL_MAX_DELAY);
+      ParseAndDisplayIRData(ProcessBuffer[SLAVE_1], IR_BUFFER_SIZE);
+      
+      // HAL_UART_Transmit(&huart2, (uint8_t*)"\r\n", 2, HAL_MAX_DELAY);
+
       LED_Off();
+      IR_ClearDataReady(SLAVE_1);
     }
     
-    // 延遲 1 秒，避免過度佔用 I2C 匯流排
-    HAL_Delay(1000);
+    // Small delay to avoid excessive CPU usage
+    HAL_Delay(10);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
