@@ -117,14 +117,15 @@ int main(void)
   
   // Startup indicator: Flash 3 times to show system is ready
   LED_Flash(50, 3);
-  
+
   uint32_t lastRequestTime = HAL_GetTick();
+  const uint8_t dataFreq = 100; // in ms
   
   while (1) {
     uint32_t currentTime = HAL_GetTick();
     
     // Request IR data every 100ms
-    if (currentTime - lastRequestTime >= 100 && !IR_IsDataReady(SLAVE_1)) {
+    if (currentTime - lastRequestTime >= dataFreq && !IR_IsDataReady(SLAVE_1)) {
       if (IR_ReadData(SLAVE_1) == HAL_OK) {
         lastRequestTime = currentTime;
       }

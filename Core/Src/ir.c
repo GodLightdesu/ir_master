@@ -116,6 +116,11 @@ void IR_ProcessData(Slave_ID slave_id, uint8_t sampling_times) {
   }
 }
 
+float IR_ADC_to_Voltage(uint16_t adc_value, float vref) {
+  // 假設 12-bit ADC (0-4095)
+  return (adc_value * vref) / 4095.0f;
+}
+
 /* I2C event callback */
 void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c) {
   for (int sid = 0; sid < SLAVES_NO; sid++) {
