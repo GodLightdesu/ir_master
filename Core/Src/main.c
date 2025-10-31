@@ -20,6 +20,7 @@
 #include "main.h"
 #include "dma.h"
 #include "i2c.h"
+#include "stm32f1xx_hal_uart.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -119,12 +120,11 @@ int main(void)
   LED_Flash(50, 3);
 
   uint32_t lastRequestTime = HAL_GetTick();
-  const uint8_t dataFreq = 30; // in ms
+  const uint8_t dataFreq = 50; // in ms
   
   while (1) {
+    // Request IR data every 50ms
     uint32_t currentTime = HAL_GetTick();
-    
-    // Request IR data every 100ms
     if (currentTime - lastRequestTime >= dataFreq && !IR_IsDataReady(SLAVE_1)) {
       if (IR_ReadData(SLAVE_1) == HAL_OK) {
         lastRequestTime = currentTime;
@@ -138,10 +138,15 @@ int main(void)
 
       // Display raw hex data for reference (uncomment if needed)
       // DisplayRawHexData(ProcessBuffer[SLAVE_1], IR_BUFFER_SIZE);
-      
+
       // Parse and display as decimal values (now with ambient light removed)
       ParseAndDisplayIRData(ProcessBuffer[SLAVE_1], IR_BUFFER_SIZE);
-      
+
+      // updateValues();
+      // char outputStr[100];
+      // int len = snprintf(outputStr, sizeof(outputStr), "Max Eye: %d, Max Value: %d\r\n", maxEye, maxValue);
+      // HAL_UART_Transmit(&huart2, (const uint8_t *)outputStr, len, HAL_MAX_DELAY);
+
       LED_Off();
       IR_ClearDataReady(SLAVE_1);
     }

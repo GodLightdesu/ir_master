@@ -13,6 +13,9 @@
 typedef enum { SLAVE_1 = 0, SLAVE_2 } Slave_ID;
 extern uint8_t ProcessBuffer[2][IR_BUFFER_SIZE];
 
+extern uint8_t maxEye;
+extern uint16_t maxValue;
+
 void IR_Init(I2C_HandleTypeDef *hi2c1, I2C_HandleTypeDef *hi2c2);
 
 HAL_StatusTypeDef IR_ReadData(Slave_ID slaves_id);
@@ -22,5 +25,7 @@ void IR_ClearDataReady(Slave_ID slave_id);
 
 uint16_t combine_data(uint8_t msb, uint8_t lsb);
 float IR_ADC_to_Voltage(uint16_t adc_value, float vref);
+
+void updateValues();
 
 #endif

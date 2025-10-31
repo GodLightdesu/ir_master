@@ -12,6 +12,10 @@ static uint8_t RxBuffer[SLAVES_NO][IR_BUFFER_SIZE] = {0};      // ISR 寫入
 uint8_t ProcessBuffer[SLAVES_NO][IR_BUFFER_SIZE] = {0};        // Main 讀取
 static volatile uint8_t DataReady[SLAVES_NO] = {0};            // 資料就緒標誌
 
+uint8_t maxEye = 0;
+uint16_t maxValue = 0;
+static uint16_t eyeValues[SLAVES_NO * EYE_NUM] = {0};
+
 void IR_Init(I2C_HandleTypeDef *hi2c1, I2C_HandleTypeDef *hi2c2) {
   I2C_Handle[SLAVE_1] = hi2c1;
   I2C_Handle[SLAVE_2] = hi2c2;
@@ -64,7 +68,6 @@ void IR_ClearDataReady(Slave_ID slave_id) { DataReady[slave_id] = 0; }
 
 uint16_t combine_data(uint8_t msb, uint8_t lsb) { return (msb << 8) | lsb; }
 
-
 float IR_ADC_to_Voltage(uint16_t adc_value, float vref) {
   // 假設 12-bit ADC (0-4095)
   return (adc_value * vref) / 4095.0f;
@@ -81,6 +84,36 @@ void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c) {
       DataReady[sid] = 1;
       
       break;
+    }
+  }
+}
+
+void updateValues() {
+  // Require both slaves to have new data
+  DataReady[SLAVE_2] = 1;
+  if (!IR_IsDataReady(SLAVE_1) || !IR_IsDataReady(SLAVE_2)) {
+    return; // No new data to process
+  }
+
+  // Reset previous result before recomputing
+  maxValue = 0;
+  maxEye = 0;
+
+  // Extract eye values from both slaves
+  for (int sid = 0; sid < SLAVES_NO; sid++) {
+    for (int i = 0; i < EYE_NUM; i++) {
+      // ProcessBuffer layout: [Vref_LSB,Vref_MSB, eye0_LSB, eye0_MSB, eye1_LSB, eye1_MSB, ...]
+      uint8_t lsb = ProcessBuffer[sid][2 + i * 2];
+      uint8_t msb = ProcessBuffer[sid][3 + i * 2];
+      eyeValues[sid * EYE_NUM + i] = combine_data(msb, lsb);
+    }
+  }
+
+  // Find max eye value
+  for (int i = 0; i < SLAVES_NO * EYE_NUM; i++) {
+    if (eyeValues[i] > maxValue) {
+      maxValue = eyeValues[i];
+      maxEye = i;
     }
   }
 }
