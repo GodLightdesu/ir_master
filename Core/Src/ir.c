@@ -71,49 +71,101 @@ void IR_ClearDataReady(Slave_ID slave_id) { DataReady[slave_id] = 0; }
 uint16_t combine_data(uint8_t msb, uint8_t lsb) { return (msb << 8) | lsb; }
 
 void IR_ProcessData(Slave_ID slave_id, uint8_t sampling_times) {
-  // Limit sampling times to buffer size
-  if (sampling_times > MAX_SAMPLES) sampling_times = MAX_SAMPLES;
-  if (sampling_times == 0) return;
-  
-  uint8_t idx = SampleIndex[slave_id];
-  
-  // Store current sample (skip Vref at bytes 0-1)
-  for (int i = 0; i < EYE_NUM; i++) {
-    int pos = (i + 1) * 2;
-    SampleBuffer[slave_id][idx][i] = 
-      (ProcessBuffer[slave_id][pos + 1] << 8) | ProcessBuffer[slave_id][pos];
+  // ==================== Step 1: Validate Parameters ====================
+  if (sampling_times > MAX_SAMPLES) {
+    sampling_times = MAX_SAMPLES;  // Limit to buffer size
+  }
+  if (sampling_times == 0) {
+    return;  // Nothing to process
   }
   
-  // Update index and wait for enough samples
-  SampleIndex[slave_id] = (idx + 1) % sampling_times;
-  if (SampleCount[slave_id] < sampling_times) {
-    SampleCount[slave_id]++;
-    return;
-  }
+  // ==================== Step 2: Store Current Sample ====================
+  uint8_t current_idx = SampleIndex[slave_id];
+  uint8_t *pProcessBuf = ProcessBuffer[slave_id];
   
-  // Calculate average and find global min in one pass
-  uint16_t avg[EYE_NUM];
-  uint16_t global_min = 0xFFFF;
-
-  // Calculate averages of each sensor
+  // Copy 7 sensor values from ProcessBuffer to SampleBuffer (skip Vref at bytes 0-1)
   for (int sensor = 0; sensor < EYE_NUM; sensor++) {
-    uint32_t sum = 0;
-    for (int sample = 0; sample < sampling_times; sample++) {
-      sum += SampleBuffer[slave_id][sample][sensor];
-    }
-    avg[sensor] = sum / sampling_times;
-    if (avg[sensor] < global_min) global_min = avg[sensor];
+    int byte_pos = (sensor + 1) * 2;  // Skip Vref (bytes 0-1), each sensor is 2 bytes
+    uint8_t lsb = pProcessBuf[byte_pos];
+    uint8_t msb = pProcessBuf[byte_pos + 1];
+    SampleBuffer[slave_id][current_idx][sensor] = (msb << 8) | lsb;  // Combine to 16-bit
   }
   
-  // Subtract ambient light and write back (preserve Vref)
-  for (int i = 0; i < EYE_NUM; i++) {
-    uint16_t val = (avg[i] > global_min) ? (avg[i] - global_min) : 0;
-    // Preserve Vref
-    int pos = (i + 1) * 2;
-    // Store the processed value
-    ProcessBuffer[slave_id][pos] = val & 0xFF;
-    ProcessBuffer[slave_id][pos + 1] = val >> 8;
+  // ==================== Step 3: Check Sample Collection Status ====================
+  uint8_t *pSampleCount = &SampleCount[slave_id];
+  
+  if (*pSampleCount < sampling_times) {
+    // Not enough samples yet - accumulate and wait
+    (*pSampleCount)++;
+    SampleIndex[slave_id] = (current_idx + 1) % sampling_times;  // Move to next position
+    return;  // Exit early - no processing yet
   }
+  
+  // ==================== Step 4: Find Global Minimum (Ambient Light) ====================
+  uint16_t global_min = 0xFFFF;  // Start with max value
+  
+  // Scan all samples of all sensors to find the minimum value (ambient light baseline)
+  for (int sensor = 0; sensor < EYE_NUM; sensor++) {
+    for (int sample = 0; sample < sampling_times; sample++) {
+      uint16_t value = SampleBuffer[slave_id][sample][sensor];
+      if (value < global_min) {
+        global_min = value;
+      }
+    }
+  }
+  
+  // ==================== Step 5: Process Latest Data & Write Back ====================
+  // Use current_idx because that's where we just wrote the latest sample
+  for (int sensor = 0; sensor < EYE_NUM; sensor++) {
+    // Get latest reading for this sensor
+    uint16_t latest_value = SampleBuffer[slave_id][current_idx][sensor];
+    
+    // Remove ambient light (subtract global minimum)
+    uint16_t processed_value = (latest_value > global_min) ? (latest_value - global_min) : 0;
+    
+    // Write back to ProcessBuffer in little-endian format
+    int byte_pos = (sensor + 1) * 2;  // Preserve Vref at bytes 0-1
+    pProcessBuf[byte_pos]     = processed_value & 0xFF;        // LSB
+    pProcessBuf[byte_pos + 1] = (processed_value >> 8) & 0xFF; // MSB
+  }
+  arrangeData(slave_id);
+  
+  // ==================== Step 6: Update Index for Next Write ====================
+  SampleIndex[slave_id] = (current_idx + 1) % sampling_times;  // Circular buffer
+}
+
+/*
+eye: 1, 2, 3, 4, 5, 6, 7
+buf: 1, 2, 4, 5, 3, 6, 7
+*/
+void arrangeData(Slave_ID slave_id) {
+  uint8_t *pProcessBuf = ProcessBuffer[slave_id];
+  uint8_t arrangedBuf[IR_BUFFER_SIZE] = {0};
+
+  // Copy Vref (bytes 0-1)
+  arrangedBuf[0] = pProcessBuf[0];
+  arrangedBuf[1] = pProcessBuf[1];
+
+  // Rearranging according to the specified order
+  for (int i = 0; i < EYE_NUM; i++) {
+    int srcIndex;
+    switch (i) {
+      case 0: srcIndex = 1; break; // eye 1
+      case 1: srcIndex = 2; break; // eye 2
+      case 2: srcIndex = 4; break; // eye 3
+      case 3: srcIndex = 5; break; // eye 4
+      case 4: srcIndex = 3; break; // eye 5
+      case 5: srcIndex = 6; break; // eye 6
+      case 6: srcIndex = 7; break; // eye 7
+      default: srcIndex = i + 1; break;
+    }
+    // Each sensor data is 2 bytes
+    arrangedBuf[(i + 1) * 2]     = pProcessBuf[srcIndex * 2];     // LSB
+    arrangedBuf[(i + 1) * 2 + 1] = pProcessBuf[srcIndex * 2 + 1]; // MSB
+  }
+
+  // Copy back to ProcessBuffer
+  memcpy(pProcessBuf, arrangedBuf, IR_BUFFER_SIZE);
 }
 
 float IR_ADC_to_Voltage(uint16_t adc_value, float vref) {
