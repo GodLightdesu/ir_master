@@ -125,8 +125,10 @@ int main(void)
     
     // Request IR data every 100ms
     if (currentTime - lastRequestTime >= 100 && !IR_IsDataReady(SLAVE_1)) {
-      IR_ReadData(SLAVE_1);
-      lastRequestTime = currentTime;
+      if (IR_ReadData(SLAVE_1) == HAL_OK) {
+        lastRequestTime = currentTime;
+      }
+      // If HAL_BUSY or HAL_ERROR, will retry on next loop
     }
 
     // Check if data is ready
@@ -143,7 +145,7 @@ int main(void)
       IR_ClearDataReady(SLAVE_1);
     }
     
-    // Small delay to avoid excessive CPU usage (can be reduced or removed if using interrupts)
+    // Small delay to avoid excessive CPU usage
     HAL_Delay(1);
     /* USER CODE END WHILE */
 

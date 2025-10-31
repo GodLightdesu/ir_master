@@ -24,16 +24,25 @@ void IR_Init(I2C_HandleTypeDef *hi2c1, I2C_HandleTypeDef *hi2c2) {
   }
 }
 
-void IR_ReadData(Slave_ID slaves_id) {
-  if (I2C_Handle[slaves_id] == NULL) { return; }
+HAL_StatusTypeDef IR_ReadData(Slave_ID slaves_id) {
+  if (I2C_Handle[slaves_id] == NULL) { 
+    return HAL_ERROR; 
+  }
+
+  // Check if I2C is busy
+  if (HAL_I2C_GetState(I2C_Handle[slaves_id]) != HAL_I2C_STATE_READY) {
+    return HAL_BUSY;
+  }
 
   uint16_t devAddr = (slaves_id == SLAVE_1) ? SLAVE_1_ADDR : SLAVE_2_ADDR;
-  HAL_I2C_Master_Receive_IT(
+  HAL_StatusTypeDef status = HAL_I2C_Master_Receive_DMA(
     I2C_Handle[slaves_id],
     devAddr,
     RxBuffer[slaves_id],
     IR_BUFFER_SIZE
   );
+  
+  return status;
 }
 
 uint8_t IR_SaveData(Slave_ID slave_id, uint8_t *data, uint16_t size) {
@@ -53,6 +62,10 @@ uint8_t IR_IsDataReady(Slave_ID slave_id) { return DataReady[slave_id]; }
 
 void IR_ClearDataReady(Slave_ID slave_id) { DataReady[slave_id] = 0; }
 
+uint16_t combine_data(uint8_t msb, uint8_t lsb) {
+  return (msb << 8) | lsb;
+}
+
 /* I2C event callback */
 void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c) {
   for (int sid = 0; sid < SLAVES_NO; sid++) {
@@ -63,6 +76,18 @@ void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c) {
       // 設定資料就緒標誌
       DataReady[sid] = 1;
       
+      break;
+    }
+  }
+}
+
+/* I2C error callback */
+void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c) {
+  // Handle I2C errors
+  for (int sid = 0; sid < SLAVES_NO; sid++) {
+    if (hi2c == I2C_Handle[sid]) {
+      // Clear error state - the next request will retry
+      // You can add error counting or logging here if needed
       break;
     }
   }
