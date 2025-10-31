@@ -133,12 +133,15 @@ int main(void)
 
     // Check if data is ready
     if (IR_IsDataReady(SLAVE_1)) {
+      // Process data to remove ambient light effect (max - min algorithm)
+      IR_ProcessData(SLAVE_1, 5);
+      
       LED_Flash(100, 1);  // Single flash to indicate data received
 
       // Display raw hex data for reference (uncomment if needed)
       // DisplayRawHexData(ProcessBuffer[SLAVE_1], IR_BUFFER_SIZE);
       
-      // Parse and display as decimal values
+      // Parse and display as decimal values (now with ambient light removed)
       ParseAndDisplayIRData(ProcessBuffer[SLAVE_1], IR_BUFFER_SIZE);
       
       LED_Off();

@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <string.h>
 
+// Vref + 7 * sensors, each 2 bytes
 #define IR_BUFFER_SIZE 16 // 8 * 2 bytes
 #define EYE_NUM 7
 
@@ -20,4 +21,7 @@ uint8_t IR_IsDataReady(Slave_ID slave_id);
 void IR_ClearDataReady(Slave_ID slave_id);
 
 uint16_t combine_data(uint8_t msb, uint8_t lsb);
+
+void IR_ProcessData(Slave_ID slave_id, uint8_t sampling_times);
+
 #endif
