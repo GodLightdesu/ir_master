@@ -26,9 +26,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "i2c_master.h"
+#include "data_uart.h"
 #include "led.h"
 #include "ir.h"
-#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -60,38 +60,6 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-// Function to parse and display IR data as decimal values
-void ParseAndDisplayIRData(uint8_t *data, uint16_t size) {
-    char buffer[128];
-    int pos = 0;
-    
-    // Parse each 2-byte pair
-    for (int i = 0; i < size; i += 2) {
-        uint16_t value = (data[i+1] << 8) | data[i];  // Little-endian
-        pos += sprintf(&buffer[pos], "%u ", value);
-    }
-    
-    buffer[pos++] = '\r';
-    buffer[pos++] = '\n';
-    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, pos, HAL_MAX_DELAY);
-}
-
-// Function to display raw hex data
-void DisplayRawHexData(uint8_t *data, uint16_t size) {
-    char buffer[64];
-    int bufferPos = 0;
-    
-    for (int i = 0; i < size; i++) {
-        bufferPos += sprintf(&buffer[bufferPos], "%02x ", data[i]);
-    }
-    
-    buffer[bufferPos++] = '\r';
-    buffer[bufferPos++] = '\n';
-    buffer[bufferPos] = '\0';
-    
-    HAL_UART_Transmit(&huart2, (uint8_t*)buffer, bufferPos, HAL_MAX_DELAY);
-}
 
 /* USER CODE END 0 */
 
@@ -130,8 +98,8 @@ int main(void)
   // Ensure LED initial state is OFF
   LED_Off();
   
-  // Brief delay for system stabilization
-  HAL_Delay(200);
+  // Initialize UART for data output
+  dataUart_Init(&huart2);
   
   // Initialize IR module
   IR_Init(&hi2c1, NULL);
@@ -139,8 +107,8 @@ int main(void)
   // Clear any possible residual states
   IR_ClearDataReady(SLAVE_1);
   
-  // Additional delay to ensure I2C is fully ready
-  HAL_Delay(100);
+  // Brief delay for I2C slave device stabilization (if needed)
+  HAL_Delay(10);  // Reduced from 100ms
 
   /* USER CODE END 2 */
 
@@ -149,7 +117,6 @@ int main(void)
   
   // Startup indicator: Flash 3 times to show system is ready
   LED_Flash(50, 3);
-  HAL_Delay(500);
   
   uint32_t lastRequestTime = HAL_GetTick();
   
@@ -166,22 +133,18 @@ int main(void)
     if (IR_IsDataReady(SLAVE_1)) {
       LED_Flash(100, 1);  // Single flash to indicate data received
 
-      // Display raw hex data for reference
-      // HAL_UART_Transmit(&huart2, (uint8_t*)"Raw: ", 5, HAL_MAX_DELAY);
+      // Display raw hex data for reference (uncomment if needed)
       // DisplayRawHexData(ProcessBuffer[SLAVE_1], IR_BUFFER_SIZE);
       
       // Parse and display as decimal values
-      HAL_UART_Transmit(&huart2, (uint8_t*)"Decimal: ", 9, HAL_MAX_DELAY);
       ParseAndDisplayIRData(ProcessBuffer[SLAVE_1], IR_BUFFER_SIZE);
       
-      // HAL_UART_Transmit(&huart2, (uint8_t*)"\r\n", 2, HAL_MAX_DELAY);
-
       LED_Off();
       IR_ClearDataReady(SLAVE_1);
     }
     
-    // Small delay to avoid excessive CPU usage
-    HAL_Delay(10);
+    // Small delay to avoid excessive CPU usage (can be reduced or removed if using interrupts)
+    HAL_Delay(1);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

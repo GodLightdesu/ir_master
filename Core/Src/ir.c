@@ -9,7 +9,7 @@ static I2C_HandleTypeDef *I2C_Handle[SLAVES_NO] = {0};
 
 // 雙緩衝設計
 static uint8_t RxBuffer[SLAVES_NO][IR_BUFFER_SIZE] = {0};      // ISR 寫入
-uint8_t ProcessBuffer[SLAVES_NO][IR_BUFFER_SIZE] = {0}; // Main 讀取
+uint8_t ProcessBuffer[SLAVES_NO][IR_BUFFER_SIZE] = {0};        // Main 讀取
 static volatile uint8_t DataReady[SLAVES_NO] = {0};            // 資料就緒標誌
 
 void IR_Init(I2C_HandleTypeDef *hi2c1, I2C_HandleTypeDef *hi2c2) {
