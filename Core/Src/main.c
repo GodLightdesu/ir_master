@@ -119,7 +119,7 @@ int main(void)
   LED_Flash(50, 3);
 
   uint32_t lastRequestTime = HAL_GetTick();
-  const uint8_t dataFreq = 100; // in ms
+  const uint8_t dataFreq = 30; // in ms
   
   while (1) {
     uint32_t currentTime = HAL_GetTick();
@@ -133,10 +133,7 @@ int main(void)
     }
 
     // Check if data is ready
-    if (IR_IsDataReady(SLAVE_1)) {
-      // Process data to remove ambient light effect (max - min algorithm)
-      IR_ProcessData(SLAVE_1, 5);
-      
+    if (IR_IsDataReady(SLAVE_1)) {  
       LED_Flash(100, 1);  // Single flash to indicate data received
 
       // Display raw hex data for reference (uncomment if needed)

@@ -21,9 +21,6 @@ uint8_t IR_IsDataReady(Slave_ID slave_id);
 void IR_ClearDataReady(Slave_ID slave_id);
 
 uint16_t combine_data(uint8_t msb, uint8_t lsb);
-
-void IR_ProcessData(Slave_ID slave_id, uint8_t sampling_times);
-void arrangeData(Slave_ID slave_id);
 float IR_ADC_to_Voltage(uint16_t adc_value, float vref);
 
 #endif
